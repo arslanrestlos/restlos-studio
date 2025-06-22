@@ -2,37 +2,37 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { connectToDB } from '@/lib/mongodb';
 import User from '@/lib/models/User';
+import PendingUser from '@/lib/models/PendingUser';
 import { EmailService } from '@/lib/email/emailService';
 
 export async function POST(request: NextRequest) {
   try {
-    const { email, otp } = await request.json();
+    const { verificationToken, otp } = await request.json();
 
-    if (!email || !otp) {
+    if (!verificationToken || !otp) {
       return NextResponse.json(
-        { error: 'E-Mail und OTP sind erforderlich' },
+        { error: 'Verification-Token und OTP sind erforderlich' },
         { status: 400 }
       );
     }
 
     await connectToDB();
 
-    // User suchen (unverifiziert)
-    const user = await User.findOne({
-      email: email.toLowerCase(),
-      isVerified: false,
+    // Pending User mit Token suchen
+    const pendingUser = await PendingUser.findOne({
+      verificationToken: verificationToken,
     });
 
-    if (!user) {
+    if (!pendingUser) {
       return NextResponse.json(
-        { error: 'Account nicht gefunden oder bereits verifiziert' },
+        { error: 'Ungültiger oder abgelaufener Verifizierungslink' },
         { status: 404 }
       );
     }
 
     // OTP-Verifizierung mit Model-Methode
-    if (!user.verifyOTP(otp)) {
-      if (user.isOTPExpired()) {
+    if (!pendingUser.verifyOTP(otp)) {
+      if (pendingUser.isOTPExpired()) {
         return NextResponse.json(
           {
             error:
@@ -47,30 +47,53 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Account verifizieren
-    user.isVerified = true;
-    user.clearOTP(); // OTP löschen
-    await user.save();
+    // Prüfen ob User inzwischen erstellt wurde (Sicherheitscheck)
+    const existingUser = await User.findOne({ email: pendingUser.email });
+    if (existingUser) {
+      // Pending User löschen
+      await PendingUser.deleteOne({ _id: pendingUser._id });
+      return NextResponse.json(
+        { error: 'E-Mail wird bereits verwendet' },
+        { status: 409 }
+      );
+    }
 
-    console.log(`Account verifiziert: ${user.email}`);
+    // JETZT ERST den echten User erstellen
+    const newUser = new User({
+      firstName: pendingUser.firstName,
+      lastName: pendingUser.lastName,
+      email: pendingUser.email,
+      password: pendingUser.password, // Bereits gehashed
+      role: 'user',
+      approved: false, // Weiterhin Admin-Freischaltung erforderlich
+      isVerified: true, // E-Mail ist jetzt verifiziert
+      isActive: true,
+    });
 
-    // Bestätigungs-E-Mail senden (dass Verifizierung erfolgreich)
+    await newUser.save();
+
+    // Pending User löschen
+    await PendingUser.deleteOne({ _id: pendingUser._id });
+
+    console.log(`User erfolgreich erstellt und verifiziert: ${newUser.email}`);
+
+    // Professionelle Bestätigungs-E-Mail senden
     try {
       await EmailService.sendVerificationSuccessEmail({
-        email: user.email,
-        firstName: user.firstName,
-        lastName: user.lastName,
+        email: newUser.email,
+        firstName: newUser.firstName,
+        lastName: newUser.lastName,
       });
       console.log('Verification Success E-Mail gesendet');
     } catch (emailError) {
       console.error('Verification Success E-Mail Fehler:', emailError);
-      // Nicht kritisch - Verifizierung trotzdem erfolgreich
+      // Nicht kritisch - User ist trotzdem erstellt
     }
 
     return NextResponse.json({
       success: true,
       message:
-        'E-Mail erfolgreich bestätigt! Dein Account wird nun von unserem Team geprüft.',
+        'E-Mail erfolgreich bestätigt! Dein Account wurde erstellt und wird nun von unserem Team geprüft.',
     });
   } catch (error) {
     console.error('OTP-Verifizierungsfehler:', error);

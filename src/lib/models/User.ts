@@ -10,9 +10,7 @@ export interface IUser extends Document {
   role: 'admin' | 'user' | 'manager';
   approved: boolean;
   isActive: boolean;
-  isVerified: boolean; // Neu: E-Mail-Verifizierung via OTP
-  otp?: string; // Neu: OTP-Code
-  otpExpires?: Date; // Neu: OTP-Ablaufzeit
+  isVerified: boolean; // E-Mail-Verifizierung (wird von PendingUser → User gesetzt)
   permissions: UserPermissions;
   lastLogin?: Date;
   createdAt: Date;
@@ -57,15 +55,7 @@ const UserSchema = new Schema<IUser>(
     },
     isVerified: {
       type: Boolean,
-      default: false, // Neu: E-Mail-Verifizierung erforderlich
-    },
-    otp: {
-      type: String,
-      required: false, // Nur während Verifizierung vorhanden
-    },
-    otpExpires: {
-      type: Date,
-      required: false, // Nur während Verifizierung vorhanden
+      default: false, // Wird auf true gesetzt wenn von PendingUser erstellt
     },
     permissions: {
       marketing: {
@@ -102,11 +92,9 @@ const UserSchema = new Schema<IUser>(
 );
 
 // Indexes für bessere Performance
-UserSchema.index({ email: 1 });
 UserSchema.index({ role: 1 });
 UserSchema.index({ approved: 1, isActive: 1 });
-UserSchema.index({ isVerified: 1 }); // Neu: Index für Verifizierung
-UserSchema.index({ otp: 1, otpExpires: 1 }); // Neu: Index für OTP-Suche
+UserSchema.index({ isVerified: 1 });
 
 // Pre-save Middleware: Admin-Role bekommt automatisch alle Permissions
 UserSchema.pre('save', function (next) {
@@ -152,30 +140,6 @@ UserSchema.methods.revokePermission = function (
   }
 };
 
-// Neu: OTP-bezogene Methods
-UserSchema.methods.generateOTP = function (): string {
-  const otp = Math.floor(100000 + Math.random() * 900000).toString();
-  this.otp = otp;
-  this.otpExpires = new Date(Date.now() + 15 * 60 * 1000); // 15 Minuten
-  return otp;
-};
-
-UserSchema.methods.verifyOTP = function (inputOtp: string): boolean {
-  if (!this.otp || !this.otpExpires) return false;
-  if (new Date() > this.otpExpires) return false;
-  return this.otp === inputOtp;
-};
-
-UserSchema.methods.clearOTP = function (): void {
-  this.otp = undefined;
-  this.otpExpires = undefined;
-};
-
-UserSchema.methods.isOTPExpired = function (): boolean {
-  if (!this.otpExpires) return true;
-  return new Date() > this.otpExpires;
-};
-
 // Static Methods
 UserSchema.statics.findActiveUsers = function () {
   return this.find({ isActive: true, approved: true, isVerified: true });
@@ -192,7 +156,6 @@ UserSchema.statics.findByPermission = function (
   });
 };
 
-// Neu: Static Methods für OTP
 UserSchema.statics.findByEmail = function (email: string) {
   return this.findOne({ email: email.toLowerCase() });
 };

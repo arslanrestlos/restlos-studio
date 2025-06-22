@@ -176,11 +176,11 @@ export default function RegisterPage() {
           );
         }
       } else {
-        // NEU: OTP-Weiterleitung
-        if (data.requiresVerification && data.email) {
+        // NEU: Token-basierte OTP-Weiterleitung
+        if (data.requiresVerification && data.verificationToken) {
           showError(
             'success',
-            '🎉 Registrierung erfolgreich! Prüfe deine E-Mails für den Bestätigungscode. Du wirst weitergeleitet...'
+            '🎉 Registrierung gestartet! Prüfe deine E-Mails für den Bestätigungscode. Du wirst weitergeleitet...'
           );
 
           // Formular zurücksetzen
@@ -189,22 +189,16 @@ export default function RegisterPage() {
           setFirstName('');
           setLastName('');
 
-          // Zur OTP-Verifizierungsseite weiterleiten nach 3 Sekunden
+          // Zur OTP-Verifizierungsseite mit sicherem Token weiterleiten
           setTimeout(() => {
-            router.push(`/verify?email=${encodeURIComponent(data.email)}`);
+            router.push(`/verify?token=${data.verificationToken}`);
           }, 3000);
         } else {
-          // Fallback für alte Registrierungen ohne OTP
+          // Fallback für Fehler
           showError(
-            'success',
-            'Registrierung erfolgreich! Du erhältst eine Bestätigungs-E-Mail und kannst dich anmelden, sobald dein Account freigeschaltet wurde.'
+            'error',
+            'Registrierung fehlgeschlagen. Bitte versuche es erneut.'
           );
-
-          // Formular zurücksetzen
-          setEmail('');
-          setPassword('');
-          setFirstName('');
-          setLastName('');
         }
       }
     } catch (error) {

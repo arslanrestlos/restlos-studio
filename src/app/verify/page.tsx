@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
@@ -22,10 +22,11 @@ type ErrorState = {
   message: string;
 };
 
-export default function VerifyPage() {
+// Separate Komponente für die Verify-Logik
+function VerifyContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const email = searchParams.get('email');
+  const token = searchParams.get('token'); // NEU: Token statt E-Mail
 
   const [otp, setOtp] = useState(['', '', '', '', '', '']);
   const [loading, setLoading] = useState(false);
@@ -55,12 +56,12 @@ export default function VerifyPage() {
     return () => clearInterval(timer);
   }, []);
 
-  // Redirect falls keine E-Mail-Parameter
+  // Redirect falls kein Token
   useEffect(() => {
-    if (!email) {
+    if (!token) {
       router.push('/register');
     }
-  }, [email, router]);
+  }, [token, router]);
 
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
@@ -126,7 +127,7 @@ export default function VerifyPage() {
     inputRefs.current[focusIndex]?.focus();
   };
 
-  // OTP verifizieren
+  // OTP verifizieren - GEÄNDERT für Token-System
   const handleVerify = async () => {
     const otpCode = otp.join('');
 
@@ -151,7 +152,7 @@ export default function VerifyPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          email,
+          verificationToken: token, // NEU: Token statt E-Mail
           otp: otpCode,
         }),
       });
@@ -169,7 +170,7 @@ export default function VerifyPage() {
         } else if (response.status === 404) {
           showError(
             'error',
-            'Account nicht gefunden oder bereits verifiziert.'
+            'Ungültiger oder abgelaufener Verifizierungslink.'
           );
         } else {
           showError('error', data.error || 'Verifizierung fehlgeschlagen.');
@@ -177,7 +178,7 @@ export default function VerifyPage() {
       } else {
         showError(
           'success',
-          '🎉 E-Mail erfolgreich bestätigt! Du wirst weitergeleitet...'
+          '🎉 E-Mail erfolgreich bestätigt! Account wurde erstellt. Du wirst weitergeleitet...'
         );
 
         // Weiterleitung nach 3 Sekunden
@@ -193,7 +194,7 @@ export default function VerifyPage() {
     }
   };
 
-  // Neuen OTP anfordern
+  // Neuen OTP anfordern - GEÄNDERT für Token-System
   const handleResendOtp = async () => {
     setResendLoading(true);
     clearError();
@@ -202,7 +203,7 @@ export default function VerifyPage() {
       const response = await fetch('/api/resend-otp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email }),
+        body: JSON.stringify({ verificationToken: token }), // NEU: Token statt E-Mail
       });
 
       const data = await response.json();
@@ -256,7 +257,7 @@ export default function VerifyPage() {
     }
   };
 
-  if (!email) {
+  if (!token) {
     return null; // Lädt oder redirected
   }
 
@@ -272,7 +273,7 @@ export default function VerifyPage() {
           Zurück zur Registrierung
         </Link>
 
-        {/* Header */}
+        {/* Header - GEÄNDERT: Keine E-Mail mehr anzeigen */}
         <div className="text-center space-y-4">
           <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mx-auto">
             <Shield className="h-10 w-10 text-gray-600" />
@@ -282,12 +283,11 @@ export default function VerifyPage() {
               E-Mail bestätigen
             </h2>
             <p className="text-gray-600 mt-2">
-              Wir haben einen 6-stelligen Code an
+              Wir haben einen 6-stelligen Code an deine E-Mail-Adresse gesendet
             </p>
-            <p className="font-medium text-gray-900 break-all text-sm bg-gray-50 px-3 py-2 rounded-lg inline-block mt-2">
-              {email}
+            <p className="text-gray-600 text-sm mt-2">
+              Gib den Code ein, um deine Registrierung abzuschließen
             </p>
-            <p className="text-gray-600 text-sm mt-2">gesendet</p>
           </div>
         </div>
 
@@ -403,7 +403,56 @@ export default function VerifyPage() {
             )}
           </div>
         </div>
+
+        {/* Info Card */}
+        <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+          <div className="flex items-start space-x-3">
+            <Mail className="h-5 w-5 text-gray-500 mt-0.5" />
+            <div>
+              <h3 className="text-sm font-medium text-gray-900 mb-1">
+                Was passiert nach der Bestätigung?
+              </h3>
+              <ul className="text-xs text-gray-600 space-y-1">
+                <li>
+                  • Dein Account wird erstellt und deine E-Mail verifiziert
+                </li>
+                <li>• Dein Account wird von unserem Team geprüft</li>
+                <li>• Du erhältst eine E-Mail bei Freischaltung</li>
+              </ul>
+            </div>
+          </div>
+        </div>
       </div>
     </main>
+  );
+}
+
+// Loading-Komponente für Suspense
+function VerifyPageLoading() {
+  return (
+    <main className="flex min-h-screen items-center justify-center bg-gradient-to-br from-gray-50 to-gray-100 px-4 py-8">
+      <div className="w-full max-w-lg space-y-6 rounded-2xl bg-white p-8 shadow-lg border border-gray-200">
+        <div className="text-center space-y-4">
+          <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mx-auto">
+            <Loader2 className="h-10 w-10 text-gray-600 animate-spin" />
+          </div>
+          <div>
+            <h2 className="text-3xl font-bold text-gray-900">
+              Seite wird geladen...
+            </h2>
+            <p className="text-gray-600 mt-2">Einen Moment bitte</p>
+          </div>
+        </div>
+      </div>
+    </main>
+  );
+}
+
+// Haupt-Komponente mit Suspense
+export default function VerifyPage() {
+  return (
+    <Suspense fallback={<VerifyPageLoading />}>
+      <VerifyContent />
+    </Suspense>
   );
 }

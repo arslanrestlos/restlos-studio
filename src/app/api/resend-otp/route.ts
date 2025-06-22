@@ -1,39 +1,40 @@
 // src/app/api/resend-otp/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { connectToDB } from '@/lib/mongodb';
-import User from '@/lib/models/User';
+import PendingUser from '@/lib/models/PendingUser';
 import { EmailService } from '@/lib/email/emailService';
 
 export async function POST(request: NextRequest) {
   try {
-    const { email } = await request.json();
+    const { verificationToken } = await request.json();
 
-    if (!email) {
+    if (!verificationToken) {
       return NextResponse.json(
-        { error: 'E-Mail ist erforderlich' },
+        { error: 'Verification-Token ist erforderlich' },
         { status: 400 }
       );
     }
 
     await connectToDB();
 
-    // User suchen (unverifiziert)
-    const user = await User.findOne({
-      email: email.toLowerCase(),
-      isVerified: false,
+    // Pending User mit Token suchen
+    const pendingUser = await PendingUser.findOne({
+      verificationToken: verificationToken,
     });
 
-    if (!user) {
+    if (!pendingUser) {
       return NextResponse.json(
-        { error: 'Account nicht gefunden oder bereits verifiziert' },
+        { error: 'Ungültiger oder abgelaufener Verifizierungslink' },
         { status: 404 }
       );
     }
 
     // Rate Limiting - nur alle 2 Minuten
-    if (user.otpExpires) {
+    if (pendingUser.otpExpires) {
       const twoMinutesAgo = new Date(Date.now() - 2 * 60 * 1000);
-      const otpCreatedAt = new Date(user.otpExpires.getTime() - 15 * 60 * 1000); // OTP wurde vor 15 Min erstellt
+      const otpCreatedAt = new Date(
+        pendingUser.otpExpires.getTime() - 15 * 60 * 1000
+      ); // OTP wurde vor 15 Min erstellt
 
       if (otpCreatedAt > twoMinutesAgo) {
         const waitTime = Math.ceil(
@@ -48,20 +49,20 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Neuen OTP generieren mit Model-Methode
-    const newOtp = user.generateOTP();
-    await user.save();
+    // Neuen OTP generieren mit PendingUser-Model-Methode
+    const newOtp = pendingUser.generateOTP();
+    await pendingUser.save();
 
     // Neue OTP-E-Mail senden über EmailService
     try {
       await EmailService.sendOTPEmail({
-        email: user.email,
-        firstName: user.firstName,
-        lastName: user.lastName,
+        email: pendingUser.email,
+        firstName: pendingUser.firstName,
+        lastName: pendingUser.lastName,
         otp: newOtp,
       });
 
-      console.log(`Neuer OTP gesendet an: ${user.email}`);
+      console.log(`Neuer OTP gesendet an: ${pendingUser.email}`);
     } catch (emailError) {
       console.error('OTP-Resend E-Mail Fehler:', emailError);
       return NextResponse.json(
