@@ -19,19 +19,6 @@ const nextConfig: NextConfig = {
     ignoreBuildErrors: true,
   },
 
-  // Experimentelle Features (falls benötigt)
-  experimental: {
-    // Für bessere Performance
-    turbo: {
-      rules: {
-        '*.svg': {
-          loaders: ['@svgr/webpack'],
-          as: '*.js',
-        },
-      },
-    },
-  },
-
   // Image Optimierung
   images: {
     domains: [
