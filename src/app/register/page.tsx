@@ -1,12 +1,20 @@
 'use client';
 
 import { useState } from 'react';
+import { useRouter } from 'next/navigation'; // Neu hinzugefügt für OTP-Weiterleitung
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Loader2, AlertCircle, CheckCircle2, Eye, EyeOff } from 'lucide-react';
+import {
+  Loader2,
+  AlertCircle,
+  CheckCircle2,
+  Eye,
+  EyeOff,
+  Mail,
+} from 'lucide-react';
 
 type ErrorState = {
   type: 'error' | 'warning' | 'success' | null;
@@ -14,6 +22,8 @@ type ErrorState = {
 };
 
 export default function RegisterPage() {
+  const router = useRouter(); // Neu hinzugefügt für OTP-Weiterleitung
+
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [firstName, setFirstName] = useState('');
@@ -166,15 +176,36 @@ export default function RegisterPage() {
           );
         }
       } else {
-        showError(
-          'success',
-          'Registrierung erfolgreich! Du kannst dich anmelden, sobald dein Account freigeschaltet wurde.'
-        );
-        // Formular zurücksetzen
-        setEmail('');
-        setPassword('');
-        setFirstName('');
-        setLastName('');
+        // NEU: OTP-Weiterleitung
+        if (data.requiresVerification && data.email) {
+          showError(
+            'success',
+            '🎉 Registrierung erfolgreich! Prüfe deine E-Mails für den Bestätigungscode. Du wirst weitergeleitet...'
+          );
+
+          // Formular zurücksetzen
+          setEmail('');
+          setPassword('');
+          setFirstName('');
+          setLastName('');
+
+          // Zur OTP-Verifizierungsseite weiterleiten nach 3 Sekunden
+          setTimeout(() => {
+            router.push(`/verify?email=${encodeURIComponent(data.email)}`);
+          }, 3000);
+        } else {
+          // Fallback für alte Registrierungen ohne OTP
+          showError(
+            'success',
+            'Registrierung erfolgreich! Du erhältst eine Bestätigungs-E-Mail und kannst dich anmelden, sobald dein Account freigeschaltet wurde.'
+          );
+
+          // Formular zurücksetzen
+          setEmail('');
+          setPassword('');
+          setFirstName('');
+          setLastName('');
+        }
       }
     } catch (error) {
       console.error('Registration error:', error);
@@ -237,6 +268,22 @@ export default function RegisterPage() {
             </AlertDescription>
           </Alert>
         )}
+
+        {/* NEU: OTP-Info bei Success */}
+        {error.type === 'success' &&
+          error.message.includes('Bestätigungscode') && (
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 animate-in fade-in-0 slide-in-from-top-1 duration-300">
+              <div className="flex items-center space-x-2 text-blue-800 text-sm">
+                <Mail className="h-4 w-4" />
+                <span className="font-medium">
+                  Nächster Schritt: E-Mail bestätigen
+                </span>
+              </div>
+              <p className="text-blue-700 text-xs mt-1">
+                Du wirst automatisch zur Bestätigungsseite weitergeleitet
+              </p>
+            </div>
+          )}
 
         <div className="space-y-5">
           {/* Name Fields */}
@@ -339,6 +386,7 @@ export default function RegisterPage() {
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
                 className="absolute inset-y-0 right-0 flex items-center pr-3 hover:bg-gray-100 rounded-r transition-colors"
+                disabled={loading}
               >
                 {showPassword ? (
                   <EyeOff className="h-4 w-4 text-gray-500" />
@@ -360,8 +408,8 @@ export default function RegisterPage() {
                       passwordStrength.strength >= 75
                         ? 'text-green-600'
                         : passwordStrength.strength >= 50
-                        ? 'text-yellow-600'
-                        : 'text-red-600'
+                          ? 'text-yellow-600'
+                          : 'text-red-600'
                     }`}
                   >
                     {passwordStrength.text}

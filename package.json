@@ -1,5 +1,5 @@
 {
-  "name": "arslanstudio",
+  "name": "restlosstudio",
   "version": "1.0",
   "private": true,
   "scripts": {
@@ -9,6 +9,7 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@emailjs/browser": "^4.4.1",
     "@next-auth/mongodb-adapter": "^1.1.3",
     "@radix-ui/react-alert-dialog": "^1.1.14",
     "@radix-ui/react-avatar": "^1.1.10",
@@ -40,6 +41,7 @@
     "react-dom": "^19.0.0",
     "react-hook-form": "^7.58.0",
     "react-toastify": "^11.0.5",
+    "resend": "^4.6.0",
     "sonner": "^2.0.5",
     "tailwind-merge": "^3.3.1",
     "ts-node": "^10.9.2"
